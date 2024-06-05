@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:build/build.dart';
 import 'package:built_collection/built_collection.dart';
@@ -66,6 +65,8 @@ class OpenApiLibraryGenerator {
   final List<Expression?> routerConfig = <Expression>[];
 
   Library generate() {
+    lb.body.add(Directive.import('package:http_parser/http_parser.dart'));
+    lb.body.add(Directive.import('dart:convert'));
     lb.body.add(Directive.part(partFileName));
     lb.body.add(Directive.part(freezedPartFileName));
 
@@ -327,7 +328,7 @@ class OpenApiLibraryGenerator {
                 );
               } else if (operation.value!.requestBody?.content?.keys.firstOrNull == 'multipart/form-data') {
                 final body = '''FormData.fromMap(<String, dynamic>{
-                ${operation.value!.requestBody!.content!.values.first!.schema!.properties!.entries.map((element) => '\'${element.key}\': ${element.value!.type == APIType.object ? element.key + '.toJson()' : element.key}').join(',')}
+                ${operation.value!.requestBody!.content!.values.first!.schema!.properties!.entries.map((element) => '\'${element.key}\': ${element.value!.type == APIType.object ? 'MultipartFile.fromString(jsonEncode(' + element.key + '.toJson()), filename: \'' + element.key + '.json\', contentType: MediaType(\'application\', \'json\'))' : element.key}').join(',')}
       })''';
                 clientCode.add(
                   Code(
@@ -548,10 +549,12 @@ class OpenApiLibraryGenerator {
     if (obj.allOf != null) {
       for (final baseObj in obj.allOf!) {
         properties = {
-          ...baseObj!.properties!,
+          ...?baseObj!.properties,
           ...properties,
         };
-        override.addAll(baseObj.properties!.entries.map((e) => e.key));
+        if (baseObj.properties != null) {
+          override.addAll(baseObj.properties!.keys);
+        }
         required.addAll(baseObj.required ?? []);
         if (baseObj.referenceURI != null) {
           implements.add(refer(baseObj.referenceURI!.pathSegments.last));
@@ -848,10 +851,7 @@ class OpenApiCodeBuilder extends Builder {
       api,
       baseName,
       AssetId(outputId.package, outputId.path).changeExtension('.g.dart').pathSegments.last,
-      AssetId(outputId.package, outputId.path)
-          .changeExtension('.freezed.dart')
-          .pathSegments
-          .last,
+      AssetId(outputId.package, outputId.path).changeExtension('.freezed.dart').pathSegments.last,
       useNullSafetySyntax: useNullSafetySyntax,
     ).generate();
 
